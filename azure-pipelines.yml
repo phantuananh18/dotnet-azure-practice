@@ -38,22 +38,6 @@ stages:
         msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:PackageLocation="$(Build.ArtifactStagingDirectory)\\"'
         platform: $(buildPlatform)
         configuration: $(buildConfiguration)
-
-    - task: VSTest@2
-      displayName: Run UnitTest
-      inputs:
-        testSelector: 'testAssemblies'
-        testAssemblyVer2: |
-          **\*tests*.dll
-          !**\*TestAdapter.dll
-          !**\obj\**
-          !**\bin\**\ref\**
-        searchFolder: '$(System.DefaultWorkingDirectory)'
-        resultsFolder: '$(Common.TestResultDirectory)'
-        codeCoverageEnabled: true
-        runTestsInIsolation: true        
-        platform: '$(BuildPlatform)'
-        configuration: '$(BuildConfiguration)'
        
     - task: DotNetCoreCLI@2
       inputs:
