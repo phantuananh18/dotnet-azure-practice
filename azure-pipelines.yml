@@ -1,0 +1,138 @@
+
+trigger:
+    branches:
+     include:
+     - develop
+
+variables:
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+  dotNetFramework: 'net6.0'
+  targetRuntime: 'linux-x64'
+
+stages:
+- stage: Continuous_Integration
+  displayName: Build
+  pool: Default 
+
+  jobs:
+  - job: Build
+    cancelTimeoutInMinutes: 1
+    steps:
+    - checkout: self
+      clean: true
+    
+    - task: NuGetToolInstaller@1
+      inputs:
+        versionSpec: '6.4.0'
+
+    - task: NuGetCommand@2
+      displayName: NuGet restore
+      inputs:
+        command: 'restore'
+
+    - task: VSBuild@1
+      displayName: Build solution
+      inputs:
+        solution: '**\*.sln'
+        msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:PackageLocation="$(Build.ArtifactStagingDirectory)\\"'
+        platform: $(buildPlatform)
+        configuration: $(buildConfiguration)
+       
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: publish
+        projects: '**/ResortProjectAPI.csproj'        
+        arguments: '--configuration $(BuildConfiguration) --framework $(dotNetFramework) --runtime $(targetRuntime) --self-contained true --output $(Build.ArtifactStagingDirectory)'
+        modifyOutputPath: false
+        publishWebProjects: false
+        zipAfterPublish: True  
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'        
+
+- stage: Continuous_Deployment_Development
+  displayName: Development
+  dependsOn: Continuous_Integration
+  condition: succeeded('Continuous_Integration')
+  jobs:
+    - deployment: Development
+      displayName: Development
+      pool: Default          
+      environment: 'Development'
+      strategy: 
+        runOnce:
+          deploy:
+            steps:           
+            - task: AzureRmWebAppDeployment@4
+              inputs:
+                ConnectionType: 'AzureRM'
+                azureSubscription: 'Azure subscription 1(78d19d3f-5811-4177-bc0b-00e6b353239b)'
+                appType: 'webAppLinux'
+                WebAppName: 'dotnet-resort-api'
+                deployToSlotOrASE: true
+                ResourceGroupName: 'AzureDevops'
+                SlotName: 'development'
+                packageForLinux: '$(Pipeline.Workspace)/**/a.zip'
+                RuntimeStack: 'DOTNETCORE|6.0'
+                AppSettings: '-ASPNETCORE_ENVIRONMENT Development'
+                JSONFiles: '**/appsettings.json'
+                StartupCommand: 'dotnet ResortProjectAPI.dll'
+
+- stage: Continuous_Deployment_Staging
+  displayName: Staging
+  dependsOn: Continuous_Deployment_Development
+  condition: succeeded('Continuous_Deployment_Development')
+  jobs:
+    - deployment: Staging
+      displayName: Staging
+      pool: Default          
+      environment: 'Staging'
+      strategy: 
+        runOnce:
+          deploy:
+            steps:           
+            - task: AzureRmWebAppDeployment@4
+              inputs:
+                ConnectionType: 'AzureRM'
+                azureSubscription: 'Azure subscription 1(78d19d3f-5811-4177-bc0b-00e6b353239b)'
+                appType: 'webAppLinux'
+                WebAppName: 'dotnet-resort-api'
+                deployToSlotOrASE: true
+                ResourceGroupName: 'AzureDevops'
+                SlotName: 'development'
+                packageForLinux: '$(Pipeline.Workspace)/**/a.zip'
+                RuntimeStack: 'DOTNETCORE|6.0'
+                AppSettings: '-ASPNETCORE_ENVIRONMENT Development'
+                JSONFiles: '**/appsettings.json'
+                StartupCommand: 'dotnet ResortProjectAPI.dll'
+
+- stage: Continuous_Deployment_Production
+  displayName: Production
+  dependsOn: Continuous_Deployment_Staging
+  condition: succeeded('Continuous_Deployment_Staging')
+  jobs:
+    - deployment: Production
+      displayName: Production
+      pool: Default      
+      environment: 'Production'
+      strategy: 
+        runOnce:
+          deploy:
+            steps:  
+            - task: AzureRmWebAppDeployment@4
+              inputs:
+                ConnectionType: 'AzureRM'
+                azureSubscription: 'Azure subscription 1(78d19d3f-5811-4177-bc0b-00e6b353239b)'
+                appType: 'webAppLinux'
+                WebAppName: 'dotnet-resort-api'
+                deployToSlotOrASE: true
+                ResourceGroupName: 'AzureDevops'
+                SlotName: 'development'
+                packageForLinux: '$(Pipeline.Workspace)/**/a.zip'
+                RuntimeStack: 'DOTNETCORE|6.0'
+                AppSettings: '-ASPNETCORE_ENVIRONMENT Development'
+                JSONFiles: '**/appsettings.json'
+                StartupCommand: 'dotnet ResortProjectAPI.dll'
